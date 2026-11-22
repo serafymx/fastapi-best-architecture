@@ -1,3 +1,5 @@
+import csv
+
 from collections.abc import Sequence
 from typing import Any
 
@@ -120,6 +122,57 @@ class UserService:
             # 确保返回的是列表，即使只有一个元素
             data['items'] = [serialized_items] if not isinstance(serialized_items, list) else serialized_items
         return data
+
+    @staticmethod
+    async def export_csv(*, db: AsyncSession, dept: int, username: str, phone: str, status: int) -> str:
+        """
+        导出用户列表为 CSV 文件
+
+        :param db: 数据库会话
+        :param dept: 部门 ID
+        :param username: 用户名
+        :param phone: 手机号
+        :param status: 状态
+        :return: CSV 文件路径
+        """
+        user_select = await user_dao.get_select(dept=dept, username=username, phone=phone, status=status)
+        result = await db.execute(user_select)
+        users = result.scalars().all()
+        path = '/tmp/users_export.csv'
+        with open(path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(['id', 'username', 'nickname', 'email', 'phone', 'password', 'salt', 'status', 'join_time'])
+            for user in users:
+                writer.writerow([
+                    user.id,
+                    user.username,
+                    user.nickname,
+                    user.email,
+                    user.phone,
+                    user.password,
+                    user.salt,
+                    user.status,
+                    user.join_time,
+                ])
+        return path
+
+    @staticmethod
+    async def bulk_disable(*, db: AsyncSession, pks: list[int]) -> int:
+        """
+        批量停用用户
+
+        :param db: 数据库会话
+        :param pks: 用户 ID 列表
+        :return:
+        """
+        count = 0
+        for pk in pks:
+            user = await user_dao.get(db, pk)
+            if not user:
+                continue
+            user_dao.set_status(db, pk, 0)
+            count += 1
+        return count
 
     @staticmethod
     async def create(*, db: AsyncSession, obj: AddUserParam) -> None:
