@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, Path, Query, Request
+from fastapi.responses import FileResponse
 
 from backend.app.admin.schema.role import GetRoleDetail
 from backend.app.admin.schema.user import (
@@ -171,6 +172,32 @@ async def update_user_email(
 )
 async def delete_user(db: CurrentSessionTransaction, pk: Annotated[int, Path(description='用户 ID')]) -> ResponseModel:
     count = await user_service.delete(db=db, pk=pk)
+    if count > 0:
+        return response_base.success()
+    return response_base.fail()
+
+
+@router.get('/export', summary='导出用户', dependencies=[DependsJwtAuth])
+async def export_users(
+    db: CurrentSession,
+    query: Annotated[UserQueryParam, Query()],
+) -> FileResponse:
+    path = await user_service.export_csv(
+        db=db,
+        dept=query.dept,
+        username=query.username,
+        phone=query.phone,
+        status=query.status,
+    )
+    return FileResponse(path, filename='users.csv', media_type='text/csv')
+
+
+@router.put('/status/disable', summary='批量停用用户', dependencies=[DependsSuperUser])
+async def bulk_disable_users(
+    db: CurrentSessionTransaction,
+    pks: Annotated[list[int], Body(embed=True, description='用户 ID 列表')],
+) -> ResponseModel:
+    count = await user_service.bulk_disable(db=db, pks=pks)
     if count > 0:
         return response_base.success()
     return response_base.fail()
